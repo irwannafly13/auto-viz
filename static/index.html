@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="autoVizApp">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Viz | Instant Data Visualization</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.3/angular.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body ng-controller="MainController">
+    <!-- Top Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <i class="fas fa-chart-line"></i>
+            <span>Auto-Viz</span>
+        </div>
+        <div class="nav-menu">
+            <a href="#" ng-click="setView('dashboard')" ng-class="{active: currentView === 'dashboard'}">
+                <i class="fas fa-th-large"></i> Dashboard
+            </a>
+            <a href="#" ng-click="setView('upload')" ng-class="{active: currentView === 'upload'}">
+                <i class="fas fa-cloud-upload-alt"></i> Upload
+            </a>
+            <a href="#" ng-click="setView('groups')" ng-class="{active: currentView === 'groups'}">
+                <i class="fas fa-layer-group"></i> Groups
+            </a>
+        </div>
+        <div class="nav-actions">
+            <button class="btn-glow" ng-click="setView('upload')">
+                <i class="fas fa-plus"></i> New Viz
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Dashboard View -->
+        <section ng-show="currentView === 'dashboard'" class="view-section">
+            <div class="section-header">
+                <h1><i class="fas fa-th-large"></i> Your Dashboards</h1>
+                <p>All your auto-generated visualizations in one place</p>
+            </div>
+
+            <div class="dashboard-grid" ng-if="dashboards.length > 0">
+                <div class="dashboard-card" ng-repeat="dashboard in dashboards" ng-click="openDashboard(dashboard)">
+                    <div class="card-header">
+                        <h3>{{dashboard.name}}</h3>
+                        <button class="btn-icon" ng-click="deleteDashboard(dashboard.id, $event)">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="card-stats">
+                        <span><i class="fas fa-chart-bar"></i> {{dashboard.charts.length}} Charts</span>
+                        <span><i class="fas fa-table"></i> {{dashboard.row_count}} Rows</span>
+                        <span><i class="fas fa-columns"></i> {{dashboard.col_count}} Cols</span>
+                    </div>
+                    <div class="card-date">
+                        <i class="fas fa-clock"></i> {{formatDate(dashboard.created_at)}}
+                    </div>
+                </div>
+            </div>
+
+            <div class="empty-state" ng-if="dashboards.length === 0">
+                <i class="fas fa-chart-pie"></i>
+                <h2>No Dashboards Yet</h2>
+                <p>Upload your data to generate instant visualizations</p>
+                <button class="btn-glow" ng-click="setView('upload')">
+                    <i class="fas fa-upload"></i> Upload Data
+                </button>
+            </div>
+        </section>
+
+        <!-- Upload View -->
+        <section ng-show="currentView === 'upload'" class="view-section">
+            <div class="section-header">
+                <h1><i class="fas fa-cloud-upload-alt"></i> Upload Data</h1>
+                <p>Drop your CSV or Excel file for instant visualization</p>
+            </div>
+
+            <div class="upload-zone"
+                 ngf-drop="uploadFile($files)"
+                 ng-class="{dragging: isDragging}"
+                 ng-dragover="isDragging = true"
+                 ng-dragleave="isDragging = false"
+                 onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" style="display:none" accept=".csv,.xlsx,.xls" onchange="angular.element(this).scope().handleFileSelect(this.files)">
+                <div class="upload-icon" ng-hide="uploading">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <div class="upload-spinner" ng-show="uploading">
+                    <div class="spinner"></div>
+                </div>
+                <h2 ng-hide="uploading">Drop your file here</h2>
+                <h2 ng-show="uploading">Analyzing data & generating visualizations...</h2>
+                <p ng-hide="uploading">or click to browse (CSV, Excel)</p>
+                <p ng-show="uploading">{{uploadProgress}}</p>
+            </div>
+
+            <div class="supported-formats">
+                <span><i class="fas fa-file-csv"></i> CSV</span>
+                <span><i class="fas fa-file-excel"></i> XLSX</span>
+                <span><i class="fas fa-file-excel"></i> XLS</span>
+            </div>
+        </section>
+
+        <!-- Groups View -->
+        <section ng-show="currentView === 'groups'" class="view-section">
+            <div class="section-header">
+                <h1><i class="fas fa-layer-group"></i> Dashboard Groups</h1>
+                <p>Organize your visualizations into groups</p>
+            </div>
+
+            <div class="group-actions">
+                <button class="btn-glow" ng-click="showCreateGroup = true">
+                    <i class="fas fa-plus"></i> Create Group
+                </button>
+            </div>
+
+            <!-- Create Group Modal -->
+            <div class="modal-overlay" ng-show="showCreateGroup" ng-click="showCreateGroup = false">
+                <div class="modal" ng-click="$event.stopPropagation()">
+                    <h2><i class="fas fa-folder-plus"></i> Create New Group</h2>
+                    <input type="text" ng-model="newGroupName" placeholder="Group name..." class="input-field">
+                    <div class="dashboard-select">
+                        <h4>Select Dashboards:</h4>
+                        <label ng-repeat="dashboard in dashboards" class="checkbox-item">
+                            <input type="checkbox" ng-model="dashboard.selected">
+                            <span>{{dashboard.name}}</span>
+                        </label>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn-secondary" ng-click="showCreateGroup = false">Cancel</button>
+                        <button class="btn-glow" ng-click="createGroup()">Create</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="groups-grid" ng-if="groups.length > 0">
+                <div class="group-card" ng-repeat="group in groups">
+                    <div class="card-header">
+                        <h3><i class="fas fa-folder"></i> {{group.name}}</h3>
+                        <button class="btn-icon" ng-click="deleteGroup(group.id)">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="group-dashboards">
+                        <span ng-repeat="id in group.dashboard_ids" class="tag">
+                            {{getDashboardName(id)}}
+                        </span>
+                        <span ng-if="group.dashboard_ids.length === 0" class="empty-tag">
+                            No dashboards
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="empty-state" ng-if="groups.length === 0">
+                <i class="fas fa-folder-open"></i>
+                <h2>No Groups Yet</h2>
+                <p>Create groups to organize your dashboards</p>
+            </div>
+        </section>
+
+        <!-- Single Dashboard View -->
+        <section ng-show="currentView === 'single-dashboard'" class="view-section">
+            <div class="section-header">
+                <button class="btn-back" ng-click="setView('dashboard')">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+                <h1><i class="fas fa-chart-bar"></i> {{selectedDashboard.name}}</h1>
+                <p>{{selectedDashboard.charts.length}} auto-generated visualizations</p>
+            </div>
+
+            <div class="data-summary" ng-if="selectedDashboard">
+                <div class="summary-item">
+                    <i class="fas fa-table"></i>
+                    <span>{{selectedDashboard.row_count}} rows</span>
+                </div>
+                <div class="summary-item">
+                    <i class="fas fa-columns"></i>
+                    <span>{{selectedDashboard.col_count}} columns</span>
+                </div>
+                <div class="summary-item">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>{{selectedDashboard.charts.length}} charts</span>
+                </div>
+            </div>
+
+            <div class="charts-grid" ng-if="selectedDashboard">
+                <div class="chart-card" ng-repeat="chart in selectedDashboard.charts">
+                    <div class="chart-header">
+                        <h3>{{chart.title}}</h3>
+                        <span class="chart-type">{{chart.type}}</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-{{chart.id}}" chart-render chart-data="chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div class="toast" ng-show="toast.show" ng-class="toast.type">
+        <i class="fas" ng-class="{'fa-check-circle': toast.type === 'success', 'fa-exclamation-circle': toast.type === 'error'}"></i>
+        {{toast.message}}
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
